@@ -1,0 +1,479 @@
+{
+  "name": "Booking → Calendar → CRM (Day 2)",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "/booking-confirmed",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        2320,
+        -32
+      ],
+      "name": "Webhook",
+      "id": "18083407-48d6-44ce-bccc-ebd5e42fe99a",
+      "webhookId": "329daa5d-aad1-4938-9475-8b0dc750fb22"
+    },
+    {
+      "parameters": {
+        "fields": {
+          "values": [
+            {
+              "name": "client_name",
+              "stringValue": "={{$json.body.name}}"
+            },
+            {
+              "name": "client_email",
+              "stringValue": "={{$json.body.email}}"
+            },
+            {
+              "name": "service",
+              "stringValue": "={{$json.body.service}}"
+            },
+            {
+              "name": "start_datetime",
+              "stringValue": "={{$json.body.date + 'T' + $json.body.time + ':00'}}"
+            },
+            {
+              "name": "phone",
+              "stringValue": "={{$json.body.phone}}"
+            },
+            {
+              "name": "duration_minutes",
+              "stringValue": "={{$json.body.duration}}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3,
+      "position": [
+        2528,
+        -32
+      ],
+      "name": "Normalize Fields",
+      "id": "8da2b03e-8256-43d1-af5e-e25b23bc9d2a"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Ensure start_datetime exists\nif (!$json.start_datetime) {\n  throw new Error(\"start_datetime is missing\");\n}\n\n// Convert to ISO format with timezone\nconst startString = $json.start_datetime ? $json.start_datetime.includes(\"Z\") ? $json.start_datetime : $json.start_datetime + \"Z\" : null;\n\nif (!startString) {\n  throw new Error(\"start_datetime is missing\");\n}\n\nconst start = new Date(startString);\n\n// Validate date\nif (isNaN(start.getTime())) {\n  throw new Error(\"Invalid start_datetime: \" + $json.start_datetime);\n}\n\n// Duration in minutes (default 30)\nconst duration = Number($json.duration_minutes || 30);\n\n// Calculate end time\nconst end = new Date(start.getTime() + duration * 60000);\n\n// Return updated item\nreturn [\n  {\n    json: {\n      ...$json,\n      start_datetime: start.toISOString(),\n      end_datetime: end.toISOString()\n    }\n  }\n];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2752,
+        -32
+      ],
+      "name": "Calculate End Time",
+      "id": "e2eb3f63-2a4b-419a-b5c5-29f734c9b06c"
+    },
+    {
+      "parameters": {
+        "calendar": {
+          "mode": "list",
+          "value": "primary"
+        },
+        "start": "={{ $json.start_datetime }}",
+        "end": "={{ $json.end_datetime }}",
+        "additionalFields": {
+          "description": "={{ 'Client: ' + $('Normalize Fields').item.json.client_name + '\\nEmail: ' + $('Normalize Fields').item.json.client_email + '\\nPhone: ' + $('Normalize Fields').item.json.phone }}",
+          "summary": "={{ $('Normalize Fields').item.json.service + ' - ' + $('Normalize Fields').item.json.client_name }}"
+        }
+      },
+      "type": "n8n-nodes-base.googleCalendar",
+      "typeVersion": 1,
+      "position": [
+        2960,
+        -32
+      ],
+      "name": "Create Calendar Event",
+      "id": "8f01d40f-3a51-4a9e-a97f-e6f517c22d6f",
+      "credentials": {
+        "googleCalendarOAuth2Api": {
+          "id": "cxV46UjYNfKs20qW",
+          "name": "Google Calendar account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "search",
+        "base": {
+          "mode": "list",
+          "value": "appgU5CmeDv1Jyj4q"
+        },
+        "table": {
+          "mode": "list",
+          "value": "tblCUFjzZdxSFucbJ"
+        },
+        "filterByFormula": "={Email}=\"{{ $('Normalize Fields').item.json.client_email }}\"",
+        "returnAll": false,
+        "limit": 1,
+        "options": {}
+      },
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2,
+      "position": [
+        3168,
+        -32
+      ],
+      "name": "Find Lead",
+      "id": "567397f2-bbd7-44fa-b501-7c33ad2fa71f",
+      "alwaysOutputData": true,
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "EnalKTjGArMbkFaY",
+          "name": "Airtable Personal Access Token account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "base": {
+          "mode": "list",
+          "value": "appgU5CmeDv1Jyj4q"
+        },
+        "table": {
+          "mode": "list",
+          "value": "tblCUFjzZdxSFucbJ"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "id": "={{$json.id}}",
+            "Status": "Meeting Booked",
+            "Lead Score": 80
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "id",
+              "displayName": "id",
+              "required": false,
+              "defaultMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": true,
+              "removed": false
+            },
+            {
+              "id": "Full Name",
+              "displayName": "Full Name",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Email",
+              "displayName": "Email",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Phone",
+              "displayName": "Phone",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Status",
+              "displayName": "Status",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "options",
+              "options": [
+                {
+                  "name": "New Lead",
+                  "value": "New Lead"
+                },
+                {
+                  "name": "Contacted",
+                  "value": "Contacted"
+                },
+                {
+                  "name": "Meeting Booked",
+                  "value": "Meeting Booked"
+                },
+                {
+                  "name": "Qualified",
+                  "value": "Qualified"
+                },
+                {
+                  "name": "Lost",
+                  "value": "Lost"
+                }
+              ],
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Source",
+              "displayName": "Source",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Lead Score",
+              "displayName": "Lead Score",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "number",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Cases/Clients",
+              "displayName": "Cases/Clients",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "array",
+              "readOnly": false,
+              "removed": true
+            },
+            {
+              "id": "Next Follow-Up",
+              "displayName": "Next Follow-Up",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "dateTime",
+              "readOnly": false,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2,
+      "position": [
+        3600,
+        -48
+      ],
+      "name": "Update Lead",
+      "id": "b43ef51f-316e-43fd-80a3-b20ba6e63ef2",
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "EnalKTjGArMbkFaY",
+          "name": "Airtable Personal Access Token account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "sendTo": "={{ $('Normalize Fields').item.json.client_email }}",
+        "subject": "Your Appointment is Confirmed",
+        "message": "=Hi {{ $('Normalize Fields').item.json.client_name }},\n\nYour consultation for {{ $('Normalize Fields').item.json.service }} is confirmed.\n\n📅 Date & Time: {{ $('Normalize Fields').item.json.start_datetime }}\n📞 We will contact you on this email/number.\n\nPlease upload your required documents here:\n[Document Upload Link]\n\n– Team",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2,
+      "position": [
+        3776,
+        -32
+      ],
+      "name": "Email Client",
+      "id": "72f352ef-c660-49c9-9b19-4c4e9518243b",
+      "webhookId": "b5f08b33-12c5-44ff-8d00-7272b3a34405",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "N58L0SWvefJ1Y51i",
+          "name": "Gmail account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "sendTo": "yourteam@email.com",
+        "subject": "=📅 New Booking: {{ $('Normalize Fields').item.json.client_name }}",
+        "message": "=New appointment booked:\n\nName: {{ $('Normalize Fields').item.json.client_name }}\nService: {{ $('Normalize Fields').item.json.service }}\nTime: {{ $('Normalize Fields').item.json.start_datetime }}\nEmail: {{ $('Normalize Fields').item.json.client_email }}\nPhone: {{ $('Normalize Fields').item.json.phone }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2,
+      "position": [
+        3968,
+        -32
+      ],
+      "name": "Notify Team",
+      "id": "1243a93a-4fbf-4dd8-baca-e5c851e8913a",
+      "webhookId": "6261e69d-e02a-410f-9852-14481c1cbb75",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "N58L0SWvefJ1Y51i",
+          "name": "Gmail account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "14293f7b-a1a5-4ec9-8946-4db2df62b6ee",
+              "leftValue": "={{ $items().length }}",
+              "rightValue": 0,
+              "operator": {
+                "type": "number",
+                "operation": "gt"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        3328,
+        -32
+      ],
+      "id": "ed2a2aca-8e99-433a-a60f-891f77e5ea37",
+      "name": "If"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Normalize Fields",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize Fields": {
+      "main": [
+        [
+          {
+            "node": "Calculate End Time",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Calculate End Time": {
+      "main": [
+        [
+          {
+            "node": "Create Calendar Event",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Calendar Event": {
+      "main": [
+        [
+          {
+            "node": "Find Lead",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Find Lead": {
+      "main": [
+        [
+          {
+            "node": "If",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update Lead": {
+      "main": [
+        [
+          {
+            "node": "Email Client",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Email Client": {
+      "main": [
+        [
+          {
+            "node": "Notify Team",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If": {
+      "main": [
+        [
+          {
+            "node": "Update Lead",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        []
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "availableInMCP": false
+  },
+  "versionId": "3c8aeb65-6fb5-4c93-aac6-e83788469d10",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "61a79a93633e31c213f15ae6977c7437610e3e9f8e097a97c2c0c1e30d8a3813"
+  },
+  "id": "J8uPj7iyTywyZlXdzzKab",
+  "tags": []
+}
